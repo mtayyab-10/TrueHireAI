@@ -1,0 +1,337 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: TrueHire AI API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: cv
+    description: CV upload and parsing
+  - name: interview
+    description: Interview session management
+  - name: identity
+    description: Identity verification
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /cv/upload:
+    post:
+      operationId: uploadCv
+      tags: [cv]
+      summary: Upload and parse a CV PDF
+      description: Accepts a PDF file via multipart/form-data (field name "file"), extracts text, and uses AI to return a structured candidate profile. Returns a session_id for the interview.
+      responses:
+        "200":
+          description: CV parsed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CvUploadResult"
+        "400":
+          description: Bad request (corrupt PDF, no extractable text, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /interview/{sessionId}/start:
+    post:
+      operationId: startInterview
+      tags: [interview]
+      summary: Start an interview session and get the first question
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: First question generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InterviewQuestion"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Interview already started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /interview/{sessionId}/answer:
+    post:
+      operationId: submitAnswer
+      tags: [interview]
+      summary: Submit a candidate answer and get the next question
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerInput"
+      responses:
+        "200":
+          description: Agent response with optional next question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /interview/{sessionId}/report:
+    get:
+      operationId: getReport
+      tags: [interview]
+      summary: Generate the final evaluation report
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Final evaluation report from EvaluatorAgent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationReport"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /identity/verify:
+    post:
+      operationId: verifyIdentity
+      tags: [identity]
+      summary: Compare a reference face photo with a live webcam snapshot
+      description: >
+        Uses OpenAI Vision (GPT-4o) to compare two base64-encoded face images and
+        determine whether they show the same person. Returns a match percentage and
+        verification status. Threshold for "Verified" is 70 — increase to 80 for
+        stricter production use. Python face libraries (DeepFace, face_recognition)
+        are not available in this Node.js environment; OpenAI Vision is the
+        equivalent comparison engine here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IdentityVerifyInput"
+      responses:
+        "200":
+          description: Identity comparison result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityVerifyResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+      required:
+        - status
+        - service
+
+    CvProfile:
+      type: object
+      properties:
+        skills:
+          type: array
+          items:
+            type: string
+        projects:
+          type: array
+          items:
+            type: string
+        education:
+          type: array
+          items:
+            type: string
+        experience:
+          type: array
+          items:
+            type: string
+        claimed_technologies:
+          type: array
+          items:
+            type: string
+      required:
+        - skills
+        - projects
+        - education
+        - experience
+        - claimed_technologies
+
+    CvUploadResult:
+      type: object
+      properties:
+        session_id:
+          type: string
+        profile:
+          $ref: "#/components/schemas/CvProfile"
+      required:
+        - session_id
+        - profile
+
+    InterviewQuestion:
+      type: object
+      properties:
+        agent_name:
+          type: string
+        question:
+          type: string
+      required:
+        - agent_name
+        - question
+
+    AnswerInput:
+      type: object
+      properties:
+        answer:
+          type: string
+      required:
+        - answer
+
+    AgentResponse:
+      type: object
+      properties:
+        agent_name:
+          type: string
+        message:
+          type: string
+        next_question:
+          type: ["string", "null"]
+        suspicion_delta:
+          type: number
+      required:
+        - agent_name
+        - message
+        - next_question
+        - suspicion_delta
+
+    EvaluationReport:
+      type: object
+      properties:
+        technical_score:
+          type: integer
+        communication_score:
+          type: integer
+        cv_authenticity:
+          type: string
+          enum: ["High", "Medium", "Low"]
+        cheating_risk:
+          type: string
+          enum: ["Low", "Medium", "High"]
+        recommendation:
+          type: string
+          enum: ["Shortlist", "Manual review required", "Reject"]
+        justification:
+          type: string
+      required:
+        - technical_score
+        - communication_score
+        - cv_authenticity
+        - cheating_risk
+        - recommendation
+        - justification
+
+    IdentityVerifyInput:
+      type: object
+      properties:
+        reference_image:
+          type: string
+          description: Base64-encoded JPEG/PNG of the reference face (from CV/ID card)
+        live_image:
+          type: string
+          description: Base64-encoded JPEG/PNG of the live webcam snapshot
+      required:
+        - reference_image
+        - live_image
+
+    IdentityVerifyResult:
+      type: object
+      properties:
+        match_percentage:
+          type: number
+          description: 0–100 confidence that both images show the same person
+        verified:
+          type: boolean
+          description: True when match_percentage >= 70 (threshold is tunable in identity.ts)
+        status:
+          type: string
+          enum: ["Verified", "Mismatch"]
+      required:
+        - match_percentage
+        - verified
+        - status
+
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

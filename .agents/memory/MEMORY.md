@@ -1,0 +1,2 @@
+- [AI agent architecture](ai-agent-architecture.md) — five-agent interview system; pdf-parse needs ambient .d.ts declaration; CvFileInput binary spec field breaks Orval codegen — omit requestBody for multipart.
+- [Orval schema naming](orval-schema-naming.md) — response Zod schemas named <OperationPascal>Response (e.g. UploadCvResponse), not component names; component names only generate TS types, not Zod schemas.
